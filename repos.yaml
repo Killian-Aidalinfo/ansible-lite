@@ -12,9 +12,3 @@ repos:
     init: "init.sh"
     branch: "main"
     path: "temp/"
-
-  # - url: "https://github.com/autre-compte/autre-repo"
-  #   watcher: "*/5 * * * *"    
-  #   init: "init.sh"
-  #   branch: "dev"
-  #   path: "temp/"

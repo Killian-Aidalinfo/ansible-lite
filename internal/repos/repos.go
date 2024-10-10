@@ -122,63 +122,54 @@ func processRepo(dbPath string, repo Repo) error {
         }
     }
 
-    // Assurer la suppression du répertoire cloné après l'exécution du script, peu importe le résultat
-    defer func() {
-        logger.Log("INFO", "Suppression du répertoire cloné %s", repoPath)
-        err := os.RemoveAll(repoPath)
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors de la suppression du répertoire cloné %s : %v", repoPath, err)
-        }
-    }()
-
     // Récupérer le dernier commit de la base de données
     lastCommit, err := db.GetLastCommit(dbPath, repo.URL)
-    if err == sql.ErrNoRows {
-        logger.Log("INFO", "Aucun commit trouvé pour le dépôt %s (%s), récupération du premier commit depuis GitHub", repo.Name, repo.URL)
-
-        // Récupérer le dernier commit depuis GitHub
-        latestCommit, err := getLatestCommit(repo.URL, repo.Branch)
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors de la récupération du dernier commit depuis GitHub pour le dépôt %s : %v", repo.URL, err)
-            return err
-        }
-
-        // Clonage du dépôt
-        logger.Log("INFO", "Clonage du dépôt %s", repo.URL)
-        err = cloneRepo(repo.URL, repo.Branch, repoPath)
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors du clonage du dépôt %s : %v", repo.URL, err)
-            return err
-        }
-
-        // Assurez-vous que le clonage est terminé avant de lancer le script
-        logger.Log("INFO", "Clonage du dépôt %s terminé. Lancement du script d'initialisation %s", repo.Name, repo.Init)
-
-        // Exécution du script init.sh si disponible
-        err = runInitScript(repo.Init, repoPath)
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors de l'exécution du script init pour le dépôt %s : %v", repo.URL, err)
-            return err
-        }
-
-        // Mettre à jour le dernier commit dans la base de données
-        logger.Log("INFO", "Mise à jour du dernier commit pour le dépôt %s", repo.Name)
-        err = db.UpdateLastCommit(dbPath, repo.Name, repo.URL, latestCommit, repo.Watcher, repo.Branch)
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors de la mise à jour du dernier commit dans la base de données pour le dépôt %s : %v", repo.URL, err)
-            return err
-        }
-
-        logger.Log("INFO", "Premier commit pour le dépôt %s enregistré : %s", repo.Name, latestCommit)
-    } else if err != nil {
+    if err != nil && err != sql.ErrNoRows {
         logger.Log("ERROR", "Erreur lors de la récupération du dernier commit pour le dépôt %s : %v", repo.Name, err)
         return err
-    } else {
-        logger.Log("INFO", "Dernier commit existant pour le dépôt %s : %s", repo.Name, lastCommit)
     }
 
+    // Récupérer le dernier commit depuis GitHub
+    latestCommit, err := getLatestCommit(repo.URL, repo.Branch)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la récupération du dernier commit depuis GitHub pour le dépôt %s : %v", repo.URL, err)
+        return err
+    }
+
+    // Comparer les commits pour éviter les opérations inutiles
+    if lastCommit == latestCommit {
+        logger.Log("INFO", "Aucun nouveau commit pour le dépôt %s, rien à faire", repo.Name)
+        return nil
+    }
+
+    // Clonage du dépôt si un nouveau commit est détecté
+    logger.Log("INFO", "Nouveau commit détecté pour le dépôt %s, clonage en cours", repo.Name)
+    err = cloneRepo(repo.URL, repo.Branch, repoPath)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors du clonage du dépôt %s : %v", repo.URL, err)
+        return err
+    }
+    logger.Log("INFO", "Clonage du dépôt %s terminé. Lancement du script d'initialisation %s", repo.Name, repo.Init)
+
+    // Exécution du script init.sh si disponible
+    err = runInitScript(repo.Init, repoPath)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de l'exécution du script init pour le dépôt %s : %v", repo.URL, err)
+        return err
+    }
+
+    // Mettre à jour le dernier commit dans la base de données
+    logger.Log("INFO", "Mise à jour du dernier commit pour le dépôt %s", repo.Name)
+    err = db.UpdateLastCommit(dbPath, repo.Name, repo.URL, latestCommit, repo.Watcher, repo.Branch)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la mise à jour du dernier commit dans la base de données pour le dépôt %s : %v", repo.URL, err)
+        return err
+    }
+
+    logger.Log("INFO", "Traitement du dépôt %s terminé avec succès", repo.Name)
     return nil
 }
+
 
 
 // Fonction pour extraire le nom du dépôt à partir de l'URL
