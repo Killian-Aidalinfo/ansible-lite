@@ -1,0 +1,10 @@
+GLOBAL:
+  type: client # Client / Server or both
+  db_path: data/db.sqlite3
+  log_path: data/log.txt
+  log_level: info
+  repos_config: repos.yaml
+  port: 8080 # Used only for server
+  # ssl: false 
+  # cert: data/cert.pem
+  # key: data/key.pem
