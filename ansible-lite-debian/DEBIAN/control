@@ -1,0 +1,7 @@
+Package: ansible-lite
+Version: 0.0.1
+Section: base
+Priority: optional
+Architecture: amd64
+Maintainer: STEIN Killian - <killian.stein@aidalinfo.fr>
+Description: Ansible Lite - A lightweight automation tool

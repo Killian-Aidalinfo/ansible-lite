@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"aidalinfo/ansible-lite/internal/config"
 	"aidalinfo/ansible-lite/internal/db"
-	"aidalinfo/ansible-lite/internal/logger" // Utiliser le package logger pour la gestion des logs
+	"aidalinfo/ansible-lite/internal/logger"
 )
 
 // InitApp est la fonction d'initialisation principale qui gère les logs et la base de données

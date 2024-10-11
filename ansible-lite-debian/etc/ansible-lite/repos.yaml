@@ -1,0 +1,8 @@
+repos:
+
+  demo:
+    url: "https://github.com/Killian-Aidalinfo/demo-ansible-lite"
+    watcher: "*/2 * * * *"
+    init: "init.sh"
+    branch: "main"
+    path: "/tmp/"

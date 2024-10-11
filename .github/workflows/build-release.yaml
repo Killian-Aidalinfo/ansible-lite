@@ -1,0 +1,47 @@
+name: Build and Release .deb
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-deb-package:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout the repository
+      uses: actions/checkout@v2
+
+    - name: Set up Go (if you're using Go)
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.19'
+
+    - name: Build the binary
+      run: |
+        cd ansible-lite-binary
+        GOOS=linux GOARCH=amd64 go build -o ansible-lite ./cmd/
+
+    - name: Create the package structure
+      run: |
+        mkdir -p ansible-lite-deb/usr/local/bin
+        mkdir -p ansible-lite-deb/etc/ansible-lite
+
+        # Copier le binaire compilé dans le dossier du package
+        cp ansible-lite-binary/ansible-lite ansible-lite-deb/usr/local/bin/
+
+    - name: Set permissions for DEBIAN scripts
+      run: |
+        chmod 0750 ansible-lite-deb/DEBIAN/postinst
+        chmod 0750 ansible-lite-deb/DEBIAN/prerm
+
+    - name: Build the .deb package
+      run:   dpkg-deb --build ansible-lite-deb ansible-lite-amd64.deb
+
+    - name: Create release and upload artifacts
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ansible-lite-binary/ansible-lite
+          ansible-lite-amd64.deb

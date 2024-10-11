@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Créer un fichier de service systemd
+cat << EOF > /etc/systemd/system/ansible-lite.service
+[Unit]
+Description=Ansible Lite Service
+
+[Service]
+WorkingDirectory=/etc/ansible-lite
+ExecStart=/usr/local/bin/ansible-lite --config config.yaml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Recharger systemd pour prendre en compte le nouveau service
+systemctl daemon-reload
+
+# Activer et démarrer le service
+systemctl enable ansible-lite
+systemctl start ansible-lite
+
+exit 0

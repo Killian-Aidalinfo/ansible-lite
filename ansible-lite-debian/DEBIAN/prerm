@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Arrêter et désactiver le service
+systemctl stop ansible-lite
+systemctl disable ansible-lite
+
+# Supprimer le fichier de service
+rm /etc/systemd/system/ansible-lite.service
+
+# Recharger systemd
+systemctl daemon-reload
+
+exit 0
