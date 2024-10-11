@@ -67,8 +67,8 @@ jobs:
       run: |
         echo "$GPG_PRIVATE_KEY" | gpg --import
         cd aidalinfo-source
-        gpg --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --detach-sign dists/stable/Release
-
+        gpg --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/main/binary-amd64/Release.gpg --detach-sign dists/stable/main/binary-amd64/Release
+    
     - name: Push changes to the apt repository
       run: |
         git config --global user.name "GitHub Actions"
@@ -77,7 +77,7 @@ jobs:
         git add .
         git commit -m "Update APT repository with new version"
         git push origin main
-        
+
     - name: Create release and upload artifacts
       uses: softprops/action-gh-release@v1
       with:
