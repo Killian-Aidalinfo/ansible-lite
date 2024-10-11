@@ -54,12 +54,12 @@ jobs:
 
     - name: Ensure necessary directories exist in the APT repository
       run: |
-        mkdir -p aidalinfo-source/pool/main/a/ansible-lite/${VERSION}/
+        mkdir -p aidalinfo-source/pool/main/a/ansible-lite/latest/
         mkdir -p aidalinfo-source/dists/stable/main/binary-amd64/
 
     - name: Copy the .deb file to the apt repository
       run: |
-        cp ansible-lite-amd64.deb aidalinfo-source/pool/main/a/ansible-lite/${VERSION}/
+        cp ansible-lite-amd64.deb aidalinfo-source/pool/main/a/ansible-lite/latest/
 
     - name: Update the Packages file
       run: |
@@ -70,7 +70,6 @@ jobs:
     - name: Update the Release file with checksums
       run: |
         cd aidalinfo-source
-        # Calculer les hachages pour le fichier Packages
         MD5SUM=$(md5sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }')
         SHA1SUM=$(sha1sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }')
         SHA256SUM=$(sha256sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }')
@@ -78,24 +77,25 @@ jobs:
         
         # Mettre à jour le fichier Release avec le format correct
         cat <<EOF > dists/stable/Release
-    Origin: Aidalinfo
-    Label: Aidalinfo
-    Suite: stable
-    Codename: stable
-    Date: $(date -u +"%a, %d %b %Y %H:%M:%S UTC")
-    Architectures: amd64
-    Components: main
-    Description: Aidalinfo Deb Repository
+        Origin: Aidalinfo
+        Label: Aidalinfo
+        Suite: stable
+        Codename: stable
+        Date: $(date -u +"%a, %d %b %Y %H:%M:%S UTC")
+        Architectures: amd64
+        Components: main
+        Description: Aidalinfo Deb Repository
 
-    MD5Sum:
-    $MD5SUM $SIZE main/binary-amd64/Packages
+        MD5Sum:
+        $MD5SUM $SIZE main/binary-amd64/Packages
 
-    SHA1:
-    $SHA1SUM $SIZE main/binary-amd64/Packages
+        SHA1:
+        $SHA1SUM $SIZE main/binary-amd64/Packages
 
-    SHA256:
-    $SHA256SUM $SIZE main/binary-amd64/Packages
-    EOF
+        SHA256:
+        $SHA256SUM $SIZE main/binary-amd64/Packages
+        EOF
+
     - name: Sign the Release file with GPG
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
@@ -103,7 +103,6 @@ jobs:
         echo "$GPG_PRIVATE_KEY" | gpg --batch --yes --import
         cd aidalinfo-source
         gpg --batch --yes --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --armor --detach-sign dists/stable/Release
-
 
     - name: Setup SSH agent
       uses: webfactory/ssh-agent@v0.5.4
@@ -119,7 +118,7 @@ jobs:
         git add .
         git commit -m "Update APT repository with new version ${VERSION}"
         git push origin main
-        
+
     - name: Create release and upload artifacts
       uses: softprops/action-gh-release@v1
       with:
