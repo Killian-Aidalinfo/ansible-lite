@@ -37,7 +37,9 @@ jobs:
         chmod 0750 ansible-lite-deb/DEBIAN/prerm
 
     - name: Build the .deb package
-      run:   dpkg-deb --build ansible-lite-deb ansible-lite-amd64.deb
+      run: |
+        dpkg-deb --build ansible-lite-deb
+        mv ansible-lite-deb.deb ansible-lite-amd64.deb
 
     - name: Create release and upload artifacts
       uses: softprops/action-gh-release@v1
