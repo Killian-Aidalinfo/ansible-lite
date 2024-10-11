@@ -28,10 +28,10 @@ jobs:
         mkdir -p ansible-lite-debian/usr/local/bin
         cp ansible-lite-binary/ansible-lite ansible-lite-debian/usr/local/bin/
 
-    # - name: Set permissions for DEBIAN scripts
-    #   run: |
-    #     chmod 0750 ansible-lite-debian/DEBIAN/postinst
-    #     chmod 0750 ansible-lite-debian/DEBIAN/prerm
+    - name: Set permissions for DEBIAN scripts
+      run: |
+        chmod 0750 ansible-lite-debian/DEBIAN/postinst
+        chmod 0750 ansible-lite-debian/DEBIAN/prerm
 
     - name: Build the .deb package
       run: |
