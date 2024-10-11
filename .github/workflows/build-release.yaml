@@ -13,7 +13,7 @@ jobs:
     - name: Checkout the repository
       uses: actions/checkout@v2
 
-    - name: Set up Go (if you're using Go)
+    - name: Set up Golang
       uses: actions/setup-go@v2
       with:
         go-version: '1.19'
@@ -25,21 +25,17 @@ jobs:
 
     - name: Create the package structure
       run: |
-        mkdir -p ansible-lite-deb/usr/local/bin
-        mkdir -p ansible-lite-deb/etc/ansible-lite
-
-        # Copier le binaire compilé dans le dossier du package
-        cp ansible-lite-binary/ansible-lite ansible-lite-deb/usr/local/bin/
+        cp ansible-lite-binary/ansible-lite ansible-lite-debianian/usr/local/bin/
 
     - name: Set permissions for DEBIAN scripts
       run: |
-        chmod 0750 ansible-lite-deb/DEBIAN/postinst
-        chmod 0750 ansible-lite-deb/DEBIAN/prerm
+        chmod 0750 ansible-lite-debian/DEBIAN/postinst
+        chmod 0750 ansible-lite-debian/DEBIAN/prerm
 
     - name: Build the .deb package
       run: |
-        dpkg-deb --build ansible-lite-deb
-        mv ansible-lite-deb.deb ansible-lite-amd64.deb
+        dpkg-deb --build ansible-lite-debian
+        mv ansible-lite-debian.deb ansible-lite-amd64.deb
 
     - name: Create release and upload artifacts
       uses: softprops/action-gh-release@v1
