@@ -8,6 +8,8 @@ on:
 jobs:
   build-deb-package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout the repository
@@ -44,3 +46,5 @@ jobs:
         files: |
           ansible-lite-binary/ansible-lite
           ansible-lite-amd64.deb
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
