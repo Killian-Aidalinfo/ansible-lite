@@ -95,7 +95,7 @@ jobs:
       run: |
         echo "$GPG_PRIVATE_KEY" | gpg --batch --yes --import
         cd aidalinfo-source
-        gpg --batch --yes --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --detach-sign dists/stable/Release
+        gpg --batch --yes --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --armor --detach-sign dists/stable/Release
 
 
     - name: Setup SSH agent
