@@ -47,14 +47,19 @@ jobs:
         ref: main
         path: aidalinfo-source
 
+    # Extract the version from the tag
+    - name: Extract version from tag
+      id: extract_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
     - name: Ensure necessary directories exist in the APT repository
       run: |
-        mkdir -p aidalinfo-source/pool/main/a/ansible-lite/
+        mkdir -p aidalinfo-source/pool/main/a/ansible-lite/${VERSION}/
         mkdir -p aidalinfo-source/dists/stable/main/binary-amd64/
 
     - name: Copy the .deb file to the apt repository
       run: |
-        cp ansible-lite-amd64.deb aidalinfo-source/pool/main/a/ansible-lite/
+        cp ansible-lite-amd64.deb aidalinfo-source/pool/main/a/ansible-lite/${VERSION}/
 
     - name: Update the Packages file
       run: |
@@ -68,16 +73,21 @@ jobs:
         echo "$GPG_PRIVATE_KEY" | gpg --import
         cd aidalinfo-source
         gpg --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/main/binary-amd64/Release.gpg --detach-sign dists/stable/main/binary-amd64/Release
-    
+
+    - name: Setup SSH agent
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
     - name: Push changes to the apt repository
       run: |
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
         cd aidalinfo-source
         git add .
-        git commit -m "Update APT repository with new version"
-        git push origin main
-
+        git commit -m "Update APT repository with new version ${VERSION}"
+        git push git@github.com:aidalinfo/aidalinfo-source.git main
+        
     - name: Create release and upload artifacts
       uses: softprops/action-gh-release@v1
       with:
