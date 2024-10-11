@@ -94,16 +94,16 @@ jobs:
         Description: Aidalinfo Deb Repository
 
         MD5Sum:
-        $MD5SUM $SIZE main/binary-amd64/Packages
-        $MD5SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
+         $MD5SUM $SIZE main/binary-amd64/Packages
+         $MD5SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
 
         SHA1:
-        $SHA1SUM $SIZE main/binary-amd64/Packages
-        $SHA1SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
+         $SHA1SUM $SIZE main/binary-amd64/Packages
+         $SHA1SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
 
         SHA256:
-        $SHA256SUM $SIZE main/binary-amd64/Packages
-        $SHA256SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
+         $SHA256SUM $SIZE main/binary-amd64/Packages
+         $SHA256SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
         EOF
 
     - name: Sign the Release file with GPG
