@@ -93,9 +93,10 @@ jobs:
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
       run: |
-        echo "$GPG_PRIVATE_KEY" | gpg --import
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --yes --import
         cd aidalinfo-source
-        gpg --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --detach-sign dists/stable/Release
+        gpg --batch --yes --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --detach-sign dists/stable/Release
+
 
     - name: Setup SSH agent
       uses: webfactory/ssh-agent@v0.5.4
