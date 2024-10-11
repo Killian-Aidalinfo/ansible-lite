@@ -65,7 +65,7 @@ jobs:
       run: |
         cd aidalinfo-source
         dpkg-scanpackages pool/main/ > dists/stable/main/binary-amd64/Packages
-        gzip -9 dists/stable/main/binary-amd64/Packages
+        gzip -9 -k dists/stable/main/binary-amd64/Packages
 
     # Ajouter les sommes de contrôle MD5, SHA1, et SHA256 au fichier Release
     - name: Update the Release file with checksums
@@ -105,7 +105,7 @@ jobs:
         $SHA256SUM $SIZE main/binary-amd64/Packages
         $SHA256SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
         EOF
-        
+
     - name: Sign the Release file with GPG
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
