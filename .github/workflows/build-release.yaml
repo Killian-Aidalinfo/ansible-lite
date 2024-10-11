@@ -14,7 +14,7 @@ jobs:
     steps:
     - name: Checkout the repository
       uses: actions/checkout@v2
-      
+
     - name: Import GPG key
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
@@ -25,11 +25,23 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y reprepro
-
+        
     - name: Set up Golang
       uses: actions/setup-go@v2
       with:
         go-version: '1.19'
+
+    # Extract the version from the tag
+    - name: Extract version from tag
+      id: extract_version
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/}"
+        VERSION="${VERSION#v}" # Remove 'v' if it exists
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Update the version in control file
+      run: |
+        sed -i "s/^Version:.*/Version: $VERSION/" ansible-lite-debian/DEBIAN/control
 
     - name: Build the binary
       run: |
@@ -57,11 +69,6 @@ jobs:
         repository: aidalinfo/aidalinfo-source
         ref: main
         path: aidalinfo-source
-
-    # Extract the version from the tag
-    - name: Extract version from tag
-      id: extract_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
     - name: Ensure necessary directories exist in the APT repository
       run: |
