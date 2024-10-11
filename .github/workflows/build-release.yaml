@@ -88,7 +88,7 @@ jobs:
         reprepro -b aidalinfo-source includedeb stable ansible-lite_amd64.deb
 
         # Inclure le paquet versionné
-        reprepro -b aidalinfo-source includedeb stable ansible-lite-${{ env.VERSION }}_${{ env.VERSION }}_amd64.deb
+        reprepro -b aidalinfo-source includedeb stable ansible-lite-${{ env.VERSION }}_amd64.deb
 
         reprepro -b aidalinfo-source export
 
