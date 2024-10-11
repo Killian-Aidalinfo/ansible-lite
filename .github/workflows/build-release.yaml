@@ -30,8 +30,8 @@ jobs:
 
     - name: Set permissions for DEBIAN scripts
       run: |
-        chmod 0750 ansible-lite-debian/DEBIAN/postinst
-        chmod 0750 ansible-lite-debian/DEBIAN/prerm
+        chmod 0755 ansible-lite-debian/DEBIAN/postinst
+        chmod 0755 ansible-lite-debian/DEBIAN/prerm
 
     - name: Build the .deb package
       run: |
