@@ -66,13 +66,36 @@ jobs:
         cd aidalinfo-source
         dpkg-scanpackages pool/main/ > dists/stable/main/binary-amd64/Packages
 
+    # Ajouter les sommes de contrôle MD5, SHA1, et SHA256 au fichier Release
+    - name: Update the Release file with checksums
+      run: |
+        cd aidalinfo-source
+        cat <<EOF > dists/stable/Release
+        Origin: Aidalinfo
+        Label: Aidalinfo
+        Suite: stable
+        Codename: stable
+        Architectures: amd64
+        Components: main
+        Description: Aidalinfo Deb Repository
+
+        MD5Sum:
+         $(md5sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }') $(stat -c%s dists/stable/main/binary-amd64/Packages) dists/stable/main/binary-amd64/Packages
+
+        SHA1:
+         $(sha1sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }') $(stat -c%s dists/stable/main/binary-amd64/Packages) dists/stable/main/binary-amd64/Packages
+
+        SHA256:
+         $(sha256sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }') $(stat -c%s dists/stable/main/binary-amd64/Packages) dists/stable/main/binary-amd64/Packages
+        EOF
+
     - name: Sign the Release file with GPG
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
       run: |
         echo "$GPG_PRIVATE_KEY" | gpg --import
         cd aidalinfo-source
-        gpg --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/main/binary-amd64/Release.gpg --detach-sign dists/stable/main/binary-amd64/Release
+        gpg --default-key "D361D1BC6756F07C94E33ADD4786BE349F3F47A6" --output dists/stable/Release.gpg --detach-sign dists/stable/Release
 
     - name: Setup SSH agent
       uses: webfactory/ssh-agent@v0.5.4
@@ -84,9 +107,10 @@ jobs:
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
         cd aidalinfo-source
+        git remote set-url origin git@github.com:aidalinfo/aidalinfo-source.git
         git add .
         git commit -m "Update APT repository with new version ${VERSION}"
-        git push git@github.com:aidalinfo/aidalinfo-source.git main
+        git push origin main
         
     - name: Create release and upload artifacts
       uses: softprops/action-gh-release@v1
