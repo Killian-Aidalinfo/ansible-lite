@@ -61,19 +61,26 @@ jobs:
       run: |
         cp ansible-lite-amd64.deb aidalinfo-source/pool/main/a/ansible-lite/latest/
 
-    - name: Update the Packages file
+    - name: Update and compress the Packages file
       run: |
         cd aidalinfo-source
         dpkg-scanpackages pool/main/ > dists/stable/main/binary-amd64/Packages
+        gzip -9 dists/stable/main/binary-amd64/Packages
 
     # Ajouter les sommes de contrôle MD5, SHA1, et SHA256 au fichier Release
     - name: Update the Release file with checksums
       run: |
         cd aidalinfo-source
+        # Calculer les hachages pour les fichiers Packages et Packages.gz
         MD5SUM=$(md5sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }')
         SHA1SUM=$(sha1sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }')
         SHA256SUM=$(sha256sum dists/stable/main/binary-amd64/Packages | awk '{ print $1 }')
         SIZE=$(stat --format=%s dists/stable/main/binary-amd64/Packages)
+
+        MD5SUM_GZ=$(md5sum dists/stable/main/binary-amd64/Packages.gz | awk '{ print $1 }')
+        SHA1SUM_GZ=$(sha1sum dists/stable/main/binary-amd64/Packages.gz | awk '{ print $1 }')
+        SHA256SUM_GZ=$(sha256sum dists/stable/main/binary-amd64/Packages.gz | awk '{ print $1 }')
+        SIZE_GZ=$(stat --format=%s dists/stable/main/binary-amd64/Packages.gz)
         
         # Mettre à jour le fichier Release avec le format correct
         cat <<EOF > dists/stable/Release
@@ -88,14 +95,17 @@ jobs:
 
         MD5Sum:
         $MD5SUM $SIZE main/binary-amd64/Packages
+        $MD5SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
 
         SHA1:
         $SHA1SUM $SIZE main/binary-amd64/Packages
+        $SHA1SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
 
         SHA256:
         $SHA256SUM $SIZE main/binary-amd64/Packages
+        $SHA256SUM_GZ $SIZE_GZ main/binary-amd64/Packages.gz
         EOF
-
+        
     - name: Sign the Release file with GPG
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
