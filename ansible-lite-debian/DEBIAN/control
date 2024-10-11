@@ -1,5 +1,5 @@
 Package: ansible-lite
-Version: 0.0.2
+Version: 0.0.1
 Section: base
 Priority: optional
 Architecture: amd64
