@@ -82,7 +82,7 @@ jobs:
         Label: Aidalinfo
         Suite: stable
         Codename: stable
-        Date: $(date -u +"%Y-%m-%d %H:%M:%S")
+        Date: $(date -u +"%a, %d %b %Y %H:%M:%S UTC")
         Architectures: amd64
         Components: main
         Description: Aidalinfo Deb Repository
