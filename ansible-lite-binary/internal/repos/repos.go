@@ -69,8 +69,25 @@ func ScheduleRepos(reposConfig *ReposConfig, dbPath string) {
 
     for name, repo := range reposConfig.Repos {
         repo.Name = name // Stocker le nom du dépôt
+                // Vérifier si le dépôt existe dans la base de données
+        repoID, err := db.GetRepoIDByURL(dbPath, repo.URL)
+        if err != nil {
+            logger.Log("ERROR", "Impossible de vérifier l'existence du dépôt %s (%s) : %v", repo.Name, repo.URL, err)
+            continue
+        }
+
+        // Si le dépôt n'existe pas, l'ajouter à la base de données
+        if repoID == 0 {
+            logger.Log("INFO", "Le dépôt %s n'existe pas dans la base, ajout en cours...", repo.Name)
+            err = db.InsertRepo(dbPath, repo.Name, repo.URL, "", repo.Watcher, repo.Branch)
+            if err != nil {
+                logger.Log("ERROR", "Erreur lors de l'insertion du dépôt %s (%s) dans la base de données : %v", repo.Name, repo.URL, err)
+                continue
+            }
+            logger.Log("INFO", "Le dépôt %s a été ajouté avec succès à la base de données", repo.Name)
+        }
         // Ajouter la tâche cron
-        _, err := c.AddFunc(repo.Watcher, func() {
+        _, err = c.AddFunc(repo.Watcher, func() {
             logger.Log("INFO", "Tâche planifiée exécutée pour le dépôt %s (%s)", repo.Name, repo.URL)
             wg.Add(1) // Ajouter une tâche au WaitGroup
             go func(r Repo) {
@@ -111,7 +128,6 @@ func processRepo(dbPath string, repo Repo) error {
     logger.Log("INFO", "Démarrage du traitement pour le dépôt %s (%s)", repo.Name, repo.URL)
     
     repoPath := filepath.Join(repo.Path, repoNameFromURL(repo.URL))
-
     // Créer le répertoire si nécessaire
     if _, err := os.Stat(repo.Path); os.IsNotExist(err) {
         logger.Log("INFO", "Création du répertoire pour le dépôt %s : %s", repo.Name, repo.Path)
@@ -139,6 +155,11 @@ func processRepo(dbPath string, repo Repo) error {
     // Comparer les commits pour éviter les opérations inutiles
     if lastCommit == latestCommit {
         logger.Log("INFO", "Aucun nouveau commit pour le dépôt %s, rien à faire", repo.Name)
+        err = os.RemoveAll(repoPath)
+        if err != nil {
+            logger.Log("ERROR", "Erreur lors de la suppression du répertoire cloné %s : %v", repoPath, err)
+            return err
+        }
         return nil
     }
 
@@ -158,6 +179,13 @@ func processRepo(dbPath string, repo Repo) error {
         return err
     }
 
+    // // Récupérer l'ID du dépôt
+    repoID, err := db.GetRepoIDByURL(dbPath, repo.URL)
+    if err != nil {
+        logger.Log("ERROR", "Impossible de récupérer l'ID du dépôt %s : %v", repo.URL, err)
+        return err
+    }
+
     // Mettre à jour le dernier commit dans la base de données
     logger.Log("INFO", "Mise à jour du dernier commit pour le dépôt %s", repo.Name)
     err = db.UpdateLastCommit(dbPath, repo.Name, repo.URL, latestCommit, repo.Watcher, repo.Branch)
@@ -171,6 +199,14 @@ func processRepo(dbPath string, repo Repo) error {
         logger.Log("ERROR", "Erreur lors de la suppression du répertoire cloné %s : %v", repoPath, err)
         return err
     }
+
+    // Journaliser l'exécution
+    err = db.LogExecution(dbPath, repoID, latestCommit)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la journalisation de l'exécution pour le dépôt %s : %v", repo.URL, err)
+        return err
+    }
+
     logger.Log("INFO", "Traitement du dépôt %s terminé avec succès", repo.Name)
     return nil
 }
