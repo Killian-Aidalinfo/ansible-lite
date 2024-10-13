@@ -123,6 +123,8 @@ func main() {
 	switch args[0] {
 	case "status":
 		statusCommand(cfg)
+	case "version":
+		fmt.Println("Bêta version : 0.0.4")
 	case "executions":
 		if len(args) > 1 && args[1] == "list" {
 			reposListCommand(cfg)
