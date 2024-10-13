@@ -9,12 +9,13 @@ import (
 // Structure pour stocker la configuration globale
 type GlobalConfig struct {
 	Global struct {
-		Type        string `yaml:"type"`
+		Type        string `yaml:" type"`
 		DBPath      string `yaml:"db_path"`
 		LogPath     string `yaml:"log_path"`
 		LogLevel    string `yaml:"log_level"`
 		ReposConfig string `yaml:"repos_config"`
 		Port        int    `yaml:"port"`
+		Credentials string `yaml:"credentials"`
 	} `yaml:"GLOBAL"`
 }
 

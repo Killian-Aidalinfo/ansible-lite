@@ -5,6 +5,7 @@ GLOBAL:
   log_level: info
   repos_config: repos.yaml
   port: 8080 # Used only for server
+  credentials:
   # ssl: false 
   # cert: data/cert.pem
   # key: data/key.pem
