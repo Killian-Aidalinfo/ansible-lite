@@ -1,7 +1,6 @@
 package db
 
 import (
-    "fmt"
     "database/sql"
     "aidalinfo/ansible-lite/internal/logger"
     _ "github.com/mattn/go-sqlite3"

@@ -8,6 +8,7 @@ import (
 	"aidalinfo/ansible-lite/internal/config"
 	"aidalinfo/ansible-lite/internal/db"
 	"aidalinfo/ansible-lite/internal/logger"
+	"aidalinfo/ansible-lite/internal/api"
 )
 
 // InitApp est la fonction d'initialisation principale qui gère les logs et la base de données
@@ -40,7 +41,8 @@ func InitApp(configPath string) (*config.GlobalConfig, error) {
 
 	// Exemple de message de log avec le niveau INFO
 	logger.Log("INFO", "Démarrage de l'application")
-
+	// Démarrer le serveur API en parallèle
+	go api.StartServer(cfg.Global.Port)
 	// Initialiser la base de données
 	err = db.InitDB(cfg.Global.DBPath)
 	if err != nil {
