@@ -15,4 +15,7 @@ func StatusHandler(w http.ResponseWriter, r *http.Request) {
 // Initialiser les routes
 func InitRoutes(mux *http.ServeMux, cfg *config.GlobalConfig) {
     mux.Handle("/status", middleware.ValidateToken(http.HandlerFunc(StatusHandler), cfg))
+    mux.Handle("/executions", middleware.ValidateToken(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        ExecutionDetailsHandler(w, r, cfg)
+    }), cfg))
 }

@@ -6,6 +6,13 @@ import (
     _ "github.com/mattn/go-sqlite3"
 )
 
+type ExecutionDetail struct {
+    RepoName   string
+    RepoURL    string
+    CommitID   string
+    ExecutedAt string
+}
+
 // Fonction pour initialiser la base de données SQLite
 func InitDB(dbPath string) error {
     db, err := sql.Open("sqlite3", dbPath)
@@ -106,6 +113,29 @@ func UpdateLastCommit(dbPath, name, repoURL, lastCommit, watchInterval, branch s
     return nil
 }
 
+// Récupérer les informations du dépôt à partir de son ID
+func GetRepoByID(dbPath string, repoID int) (string, string, error) {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        logger.Log("ERROR", "Impossible d'ouvrir la base de données : %v", err)
+        return "", "", err
+    }
+    defer db.Close()
+
+    var name, repoURL string
+    err = db.QueryRow("SELECT name, repo_url FROM repos WHERE id = ?", repoID).Scan(&name, &repoURL)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            logger.Log("ERROR", "Aucun dépôt trouvé pour l'ID : %d", repoID)
+            return "", "", nil
+        }
+        logger.Log("ERROR", "Erreur lors de la récupération des informations pour le dépôt avec l'ID %d : %v", repoID, err)
+        return "", "", err
+    }
+    return name, repoURL, nil
+}
+
+
 // Récupérer l'ID du dépôt à partir de son URL
 func GetRepoIDByURL(dbPath, repoURL string) (int, error) {
     db, err := sql.Open("sqlite3", dbPath)
@@ -127,6 +157,44 @@ func GetRepoIDByURL(dbPath, repoURL string) (int, error) {
     }
     return repoID, nil
 }
+
+
+// Récupérer les exécutions avec le nom et l'URL du dépôt
+func GetExecutionDetails(dbPath string) ([]ExecutionDetail, error) {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        logger.Log("ERROR", "Impossible d'ouvrir la base de données : %v", err)
+        return nil, err
+    }
+    defer db.Close()
+
+    query := `
+        SELECT repos.name, repos.repo_url, executions.commit_id, executions.execution_time
+        FROM executions
+        JOIN repos ON executions.repo_id = repos.id
+        ORDER BY executions.execution_time DESC
+    `
+
+    rows, err := db.Query(query)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la récupération des détails des exécutions : %v", err)
+        return nil, err
+    }
+    defer rows.Close()
+
+    var details []ExecutionDetail
+    for rows.Next() {
+        var detail ExecutionDetail
+        if err := rows.Scan(&detail.RepoName, &detail.RepoURL, &detail.CommitID, &detail.ExecutedAt); err != nil {
+            logger.Log("ERROR", "Erreur lors du scan des lignes : %v", err)
+            return nil, err
+        }
+        details = append(details, detail)
+    }
+
+    return details, nil
+}
+
 
 // Enregistrer une exécution dans la table executions
 func LogExecution(dbPath string, repoID int, commitID string) error {
