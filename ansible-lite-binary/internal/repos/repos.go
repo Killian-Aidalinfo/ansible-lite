@@ -165,7 +165,12 @@ func processRepo(dbPath string, repo Repo) error {
         logger.Log("ERROR", "Erreur lors de la mise à jour du dernier commit dans la base de données pour le dépôt %s : %v", repo.URL, err)
         return err
     }
-
+    //Delete cloned repo
+    err = os.RemoveAll(repoPath)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la suppression du répertoire cloné %s : %v", repoPath, err)
+        return err
+    }
     logger.Log("INFO", "Traitement du dépôt %s terminé avec succès", repo.Name)
     return nil
 }
