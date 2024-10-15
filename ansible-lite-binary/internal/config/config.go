@@ -16,6 +16,7 @@ type GlobalConfig struct {
 		ReposConfig string `yaml:"repos_config"`
 		Port        int    `yaml:"port"`
 		Credentials string `yaml:"credentials"`
+		GithubToken string `yaml:"gh_token"`
 	} `yaml:"GLOBAL"`
 }
 

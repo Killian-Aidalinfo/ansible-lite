@@ -20,14 +20,14 @@ func main() {
     }
 
     // Charger la configuration des dépôts (repos.yaml)
-    reposConfig, err := repos.LoadReposConfig(cfg.Global.ReposConfig)
+    reposConfig, err := repos.LoadReposConfig(cfg.Global.ReposConfig, cfg.Global.DBPath, cfg.Global.GithubToken)
     if err != nil {
         logger.Log("ERROR", "Erreur lors du chargement des dépôts : %v", err)
         return
     }
 
     // Démarrer la surveillance des dépôts (scheduling) avec le chemin de la base de données
-    repos.ScheduleRepos(reposConfig, cfg.Global.DBPath)
+    repos.ScheduleRepos(reposConfig, cfg.Global.DBPath, cfg.Global.GithubToken)
 
     // Garder l'application active
     select {}

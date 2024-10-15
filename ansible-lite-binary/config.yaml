@@ -1,8 +1,9 @@
 GLOBAL:
-  ' type': ""
+  type: client
   db_path: data/db.sqlite3
   log_path: data/log.txt
   log_level: info
   repos_config: repos.yaml
   port: 8082
-  credentials: 
+  credentials:
+  gh_token:

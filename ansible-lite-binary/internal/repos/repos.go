@@ -15,13 +15,27 @@ import (
     "aidalinfo/ansible-lite/internal/db"
     "aidalinfo/ansible-lite/internal/logger"
     "database/sql"
+    "log"
+    "regexp"
 )
 
 // Structure pour lire la réponse de l'API GitHub
-type GitHubCommit struct {
+type GithubCommit struct {
     SHA string `json:"sha"`
 }
-
+type GithubTag struct {
+    Name string `json:"name"`
+}
+type Flux struct {
+    Name     string   `yaml:"name"`   // Nom du flux
+    URLs     []string `yaml:"urls"`   // Liste d'URLs
+    Watcher  string   `yaml:"watcher"`
+    Regex    string   `yaml:"regex"`
+    InitRepo string   `yaml:"init_repo"`
+    Init     string   `yaml:"init"`
+    Branch   string   `yaml:"branch"`
+    Path     string   `yaml:"path"`
+}
 // Structure pour un dépôt individuel
 type Repo struct {
     Name     string 
@@ -35,10 +49,11 @@ type Repo struct {
 // Nouvelle structure pour la liste des dépôts avec une map pour les noms des dépôts
 type ReposConfig struct {
     Repos map[string]Repo `yaml:"repos"`
+    Flux  map[string]Flux `yaml:"flux"`
 }
 
 // Charger le fichier repos.yaml
-func LoadReposConfig(path string) (*ReposConfig, error) {
+func LoadReposConfig(path string, dbPath string, ghToken string) (*ReposConfig, error) {
     var reposConfig ReposConfig
     data, err := ioutil.ReadFile(path)
     if err != nil {
@@ -58,83 +73,184 @@ func LoadReposConfig(path string) (*ReposConfig, error) {
         reposConfig.Repos[name] = repo
     }
 
+    // Charger et insérer les flux dans la base de données
+    err = loadFluxs(dbPath, path, ghToken)
+    if err != nil {
+        // On loggue l'erreur sans la retourner, afin de ne pas stopper l'application
+        logger.Log("ERROR", "Erreur lors du chargement des flux : %v", err)
+    }
+
     return &reposConfig, nil
 }
 
-// Planifier les tâches pour chaque dépôt
-func ScheduleRepos(reposConfig *ReposConfig, dbPath string) {
-    c := cron.New()
 
-    var wg sync.WaitGroup // Créer un WaitGroup pour synchroniser les goroutines
-
-    for name, repo := range reposConfig.Repos {
-        repo.Name = name // Stocker le nom du dépôt
-                // Vérifier si le dépôt existe dans la base de données
-        repoID, err := db.GetRepoIDByURL(dbPath, repo.URL)
-        if err != nil {
-            logger.Log("ERROR", "Impossible de vérifier l'existence du dépôt %s (%s) : %v", repo.Name, repo.URL, err)
-            continue
-        }
-
-        // Si le dépôt n'existe pas, l'ajouter à la base de données
-        if repoID == 0 {
-            logger.Log("INFO", "Le dépôt %s n'existe pas dans la base, ajout en cours...", repo.Name)
-            err = db.InsertRepo(dbPath, repo.Name, repo.URL, "", repo.Watcher, repo.Branch)
-            if err != nil {
-                logger.Log("ERROR", "Erreur lors de l'insertion du dépôt %s (%s) dans la base de données : %v", repo.Name, repo.URL, err)
-                continue
-            }
-            logger.Log("INFO", "Le dépôt %s a été ajouté avec succès à la base de données", repo.Name)
-        }
-        // Ajouter la tâche cron
-        _, err = c.AddFunc(repo.Watcher, func() {
-            logger.Log("INFO", "Tâche planifiée exécutée pour le dépôt %s (%s)", repo.Name, repo.URL)
-            wg.Add(1) // Ajouter une tâche au WaitGroup
-            go func(r Repo) {
-                defer wg.Done() // Indiquer que la goroutine est terminée
-                err := processRepo(dbPath, r)
-                if err != nil {
-                    logger.Log("ERROR", "Erreur lors du traitement du dépôt %s (%s) : %v", r.Name, r.URL, err)
-                }
-            }(repo) // Passer "repo" en paramètre à la goroutine
-        })
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors de l'ajout du cron pour le dépôt %s (%s) : %v", repo.Name, repo.URL, err)
-        } else {
-            logger.Log("INFO", "Cron ajouté pour le dépôt %s (%s) avec l'expression '%s'", repo.Name, repo.URL, repo.Watcher)
-        }
-
-        // Exécuter la tâche immédiatement au démarrage
-        logger.Log("INFO", "Exécution immédiate de la tâche pour le dépôt %s (%s)", repo.Name, repo.URL)
-        wg.Add(1) // Ajouter une tâche pour l'exécution initiale
-        go func(r Repo) {
-            defer wg.Done() // Indiquer que la goroutine est terminée
-            err := processRepo(dbPath, r)
-            if err != nil {
-                logger.Log("ERROR", "Erreur lors de l'exécution initiale pour le dépôt %s (%s) : %v", r.Name, r.URL, err)
-            }
-        }(repo)
+// Charger les flux depuis le fichier repos.yaml et les insérer dans la base de données
+func loadFluxs(dbPath, reposConfigPath, ghToken string) error {
+    var reposConfig ReposConfig
+    data, err := ioutil.ReadFile(reposConfigPath)
+    if err != nil {
+        log.Printf("Impossible de lire le fichier repos.yaml : %v", err)
+        return err
     }
 
-    // Démarrer le cron pour les exécutions futures
-    c.Start()
+    err = yaml.Unmarshal(data, &reposConfig)
+    if err != nil {
+        log.Printf("Erreur lors du parsing du fichier repos.yaml : %v", err)
+        return err
+    }
 
-    // Attendre que toutes les goroutines se terminent
+    for fluxName, flux := range reposConfig.Flux {
+        for _, url := range flux.URLs {
+            exists, err := db.FluxExists(dbPath, fluxName, url)
+            if err != nil {
+                log.Printf("Erreur lors de la vérification de l'existence du flux %s : %v", fluxName, err)
+                continue // Continue même en cas d'erreur
+            }
+
+            if !exists {
+                latestTag, err := getLatestTagFromAPI(url, flux.Regex, ghToken)
+                if err != nil {
+                    log.Printf("Erreur lors de la récupération des tags pour %s : %v", url, err)
+                    continue // Continue même en cas d'erreur
+                }
+
+                err = db.InsertFlux(dbPath, fluxName, url, flux.Regex)
+                if err != nil {
+                    log.Printf("Erreur lors de l'insertion du flux %s dans la base de données : %v", fluxName, err)
+                    continue // Continue même en cas d'erreur
+                }
+
+                err = db.UpdateFluxLastTag(dbPath, fluxName, url, latestTag)
+                if err != nil {
+                    log.Printf("Erreur lors de la mise à jour du dernier tag du flux %s : %v", fluxName, err)
+                    continue // Continue même en cas d'erreur
+                }
+
+                log.Printf("Flux %s avec l'URL %s et le dernier tag %s inséré dans la base de données", fluxName, url, latestTag)
+            } else {
+                log.Printf("Flux %s avec l'URL %s existe déjà dans la base de données", fluxName, url)
+            }
+        }
+    }
+
+    return nil // Retourne nil pour ne pas stopper l'application même s'il y a eu des erreurs
+}
+
+
+
+// Planifier les tâches pour chaque dépôt
+func ScheduleRepos(reposConfig *ReposConfig, dbPath string, ghToken string) {
+    c := cron.New()
+    var wg sync.WaitGroup
+
+    // Planifier les dépôts
+    for name, repo := range reposConfig.Repos {
+        repo.Name = name
+        planRepoCron(c, &wg, repo, dbPath)
+    }
+
+    // Planifier les flux
+    for fluxName, flux := range reposConfig.Flux {
+        planFluxCron(c, &wg, fluxName, flux, dbPath, ghToken)
+    }
+
+    c.Start()
     wg.Wait()
 }
 
-// Fonction pour traiter un dépôt individuel
+
+func planRepoCron(c *cron.Cron, wg *sync.WaitGroup, repo Repo, dbPath string) {
+    _, err := c.AddFunc(repo.Watcher, func() {
+        logger.Log("INFO", "Tâche planifiée exécutée pour le dépôt %s (%s)", repo.Name, repo.URL)
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            err := processRepo(dbPath, repo)
+            if err != nil {
+                logger.Log("ERROR", "Erreur lors du traitement du dépôt %s (%s) : %v", repo.Name, repo.URL, err)
+            }
+        }()
+    })
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de l'ajout du cron pour le dépôt %s : %v", repo.Name, err)
+    }
+}
+
+func planFluxCron(c *cron.Cron, wg *sync.WaitGroup, fluxName string, flux Flux, dbPath string, ghToken string) {
+    _, err := c.AddFunc(flux.Watcher, func() {
+        logger.Log("INFO", "Tâche planifiée exécutée pour le flux %s", fluxName)
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            err := processFlux(dbPath, fluxName, flux, ghToken)
+            if err != nil {
+                logger.Log("ERROR", "Erreur lors du traitement du flux %s : %v", fluxName, err)
+            }
+        }()
+    })
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de l'ajout du cron pour le flux %s : %v", fluxName, err)
+    }
+}
+
+func processFlux(dbPath, fluxName string, flux Flux, ghToken string) error {
+    logger.Log("INFO", "Démarrage du traitement pour le flux %s", fluxName)
+
+    for _, url := range flux.URLs {
+        lastTag, err := db.GetLastTag(dbPath, fluxName, url)
+        if err != nil {
+            logger.Log("ERROR", "Erreur lors de la récupération du dernier tag pour l'URL %s dans le flux %s : %v", url, fluxName, err)
+            continue // Ne pas arrêter l'exécution pour ce flux, continuez avec le suivant
+        }
+
+        // Récupérer le dernier tag correspondant à la regex en utilisant l'API GitHub et le token
+        newTag, err := getLatestTagFromAPI(url, flux.Regex, ghToken)
+        if err != nil {
+            logger.Log("ERROR", "Erreur lors de la récupération du tag GitHub pour l'URL %s : %v", url, err)
+            continue // Ne pas arrêter, continuez avec le flux suivant
+        }
+
+        // Si un nouveau tag est détecté
+        if newTag != "" && newTag != lastTag {
+            logger.Log("INFO", "Nouveau tag détecté pour %s (flux: %s) : %s", url, fluxName, newTag)
+
+            // Cloner le dépôt d'initialisation (si nécessaire)
+            err := cloneRepo(flux.InitRepo, flux.Branch, flux.Path)
+            if err != nil {
+                logger.Log("ERROR", "Erreur lors du clonage du dépôt %s : %v", flux.InitRepo, err)
+                continue // Ne pas arrêter, continuez avec le flux suivant
+            }
+
+            // Exécuter le script init (si nécessaire)
+            err = runInitScript(flux.Init, flux.Path)
+            if err != nil {
+                logger.Log("ERROR", "Erreur lors de l'exécution du script init pour le flux %s : %v", fluxName, err)
+                continue // Ne pas arrêter, continuez avec le flux suivant
+            }
+
+            // Mettre à jour le dernier tag dans la base de données
+            err = db.UpdateFluxLastTag(dbPath, fluxName, url, newTag)
+            if err != nil {
+                logger.Log("ERROR", "Erreur lors de la mise à jour du dernier tag pour %s : %v", url, err)
+                continue // Ne pas arrêter, continuez avec le flux suivant
+            }
+        } else {
+            logger.Log("INFO", "Aucun nouveau tag détecté pour %s dans le flux %s", url, fluxName)
+        }
+    }
+    return nil // Ne pas retourner d'erreur pour laisser l'application continuer
+}
+
 func processRepo(dbPath string, repo Repo) error {
     logger.Log("INFO", "Démarrage du traitement pour le dépôt %s (%s)", repo.Name, repo.URL)
     
     repoPath := filepath.Join(repo.Path, repoNameFromURL(repo.URL))
-    // Créer le répertoire si nécessaire
     if _, err := os.Stat(repo.Path); os.IsNotExist(err) {
         logger.Log("INFO", "Création du répertoire pour le dépôt %s : %s", repo.Name, repo.Path)
         err = os.MkdirAll(repo.Path, 0750)
         if err != nil {
             logger.Log("ERROR", "Impossible de créer le répertoire %s : %v", repo.Path, err)
-            return err
+            return nil // Ne pas arrêter l'application, continuez
         }
     }
 
@@ -142,74 +258,47 @@ func processRepo(dbPath string, repo Repo) error {
     lastCommit, err := db.GetLastCommit(dbPath, repo.URL)
     if err != nil && err != sql.ErrNoRows {
         logger.Log("ERROR", "Erreur lors de la récupération du dernier commit pour le dépôt %s : %v", repo.Name, err)
-        return err
+        return nil // Continuer même en cas d'erreur
     }
 
     // Récupérer le dernier commit depuis GitHub
     latestCommit, err := getLatestCommit(repo.URL, repo.Branch)
     if err != nil {
         logger.Log("ERROR", "Erreur lors de la récupération du dernier commit depuis GitHub pour le dépôt %s : %v", repo.URL, err)
-        return err
+        return nil // Continuer même en cas d'erreur
     }
 
-    // Comparer les commits pour éviter les opérations inutiles
+    // Comparer les commits
     if lastCommit == latestCommit {
         logger.Log("INFO", "Aucun nouveau commit pour le dépôt %s, rien à faire", repo.Name)
-        err = os.RemoveAll(repoPath)
-        if err != nil {
-            logger.Log("ERROR", "Erreur lors de la suppression du répertoire cloné %s : %v", repoPath, err)
-            return err
-        }
         return nil
     }
 
-    // Clonage du dépôt si un nouveau commit est détecté
-    logger.Log("INFO", "Nouveau commit détecté pour le dépôt %s, clonage en cours", repo.Name)
+    // Clonage du dépôt
     err = cloneRepo(repo.URL, repo.Branch, repoPath)
     if err != nil {
         logger.Log("ERROR", "Erreur lors du clonage du dépôt %s : %v", repo.URL, err)
-        return err
+        return nil // Continuer même en cas d'erreur
     }
-    logger.Log("INFO", "Clonage du dépôt %s terminé. Lancement du script d'initialisation %s", repo.Name, repo.Init)
 
-    // Exécution du script init.sh si disponible
+    // Exécution du script d'init
     err = runInitScript(repo.Init, repoPath)
     if err != nil {
         logger.Log("ERROR", "Erreur lors de l'exécution du script init pour le dépôt %s : %v", repo.URL, err)
-        return err
+        return nil // Continuer même en cas d'erreur
     }
 
-    // // Récupérer l'ID du dépôt
-    repoID, err := db.GetRepoIDByURL(dbPath, repo.URL)
-    if err != nil {
-        logger.Log("ERROR", "Impossible de récupérer l'ID du dépôt %s : %v", repo.URL, err)
-        return err
-    }
-
-    // Mettre à jour le dernier commit dans la base de données
-    logger.Log("INFO", "Mise à jour du dernier commit pour le dépôt %s", repo.Name)
+    // Mettre à jour le dernier commit
     err = db.UpdateLastCommit(dbPath, repo.Name, repo.URL, latestCommit, repo.Watcher, repo.Branch)
     if err != nil {
         logger.Log("ERROR", "Erreur lors de la mise à jour du dernier commit dans la base de données pour le dépôt %s : %v", repo.URL, err)
-        return err
-    }
-    //Delete cloned repo
-    err = os.RemoveAll(repoPath)
-    if err != nil {
-        logger.Log("ERROR", "Erreur lors de la suppression du répertoire cloné %s : %v", repoPath, err)
-        return err
-    }
-
-    // Journaliser l'exécution
-    err = db.LogExecution(dbPath, repoID, latestCommit)
-    if err != nil {
-        logger.Log("ERROR", "Erreur lors de la journalisation de l'exécution pour le dépôt %s : %v", repo.URL, err)
-        return err
+        return nil // Continuer même en cas d'erreur
     }
 
     logger.Log("INFO", "Traitement du dépôt %s terminé avec succès", repo.Name)
     return nil
 }
+
 
 
 
@@ -219,6 +308,73 @@ func repoNameFromURL(url string) string {
     name := parts[len(parts)-1]
     return strings.TrimSuffix(name, ".git")
 }
+
+// Fonction pour obtenir le dernier tag depuis l'API GitHub en utilisant un token
+func getLatestTagFromAPI(repoURL, regexPattern, ghToken string) (string, error) {
+    apiURL := convertRepoURLToAPITags(repoURL)
+    client := &http.Client{}
+    page := 1
+    var allTags []GithubTag
+
+    // Boucle pour paginer et récupérer tous les tags
+    for {
+        // Ajouter le paramètre de pagination `page`
+        paginatedURL := fmt.Sprintf("%s?page=%d", apiURL, page)
+        req, err := http.NewRequest("GET", paginatedURL, nil)
+        if err != nil {
+            return "", fmt.Errorf("erreur lors de la création de la requête HTTP : %v", err)
+        }
+        req.Header.Set("Authorization", "token "+ghToken)
+
+        // Effectuer la requête
+        resp, err := client.Do(req)
+        if err != nil {
+            return "", fmt.Errorf("erreur lors de la requête HTTP pour %s : %v", repoURL, err)
+        }
+        defer resp.Body.Close()
+
+        if resp.StatusCode != http.StatusOK {
+            return "", fmt.Errorf("réponse HTTP inattendue pour %s : %s", repoURL, resp.Status)
+        }
+
+        // Décoder la réponse en une liste de tags
+        var tags []GithubTag
+        err = json.NewDecoder(resp.Body).Decode(&tags)
+        if err != nil {
+            return "", fmt.Errorf("erreur lors du décodage de la réponse JSON pour %s : %v", repoURL, err)
+        }
+
+        // Si aucun tag n'est retourné, c'est la fin de la pagination
+        if len(tags) == 0 {
+            break
+        }
+
+        // Ajouter les tags récupérés à la liste des tags
+        allTags = append(allTags, tags...)
+        page++
+    }
+
+    // Afficher tous les tags récupérés
+    log.Printf("Tags récupérés pour %s :", repoURL)
+    for _, tag := range allTags {
+        log.Printf("Tag: %s", tag.Name)
+    }
+
+    // Vérifier chaque tag avec la regex
+    re, err := regexp.Compile(regexPattern)
+    if err != nil {
+        return "", fmt.Errorf("erreur lors de la compilation de la regex : %v", err)
+    }
+
+    for _, tag := range allTags {
+        if re.MatchString(tag.Name) {
+            return tag.Name, nil
+        }
+    }
+
+    return "", fmt.Errorf("aucun tag trouvé correspondant à la regex : %s", regexPattern)
+}
+
 
 // Fonction pour obtenir le dernier commit depuis GitHub
 func getLatestCommit(repoURL, branch string) (string, error) {
@@ -239,7 +395,7 @@ func getLatestCommit(repoURL, branch string) (string, error) {
         return "", fmt.Errorf("réponse HTTP inattendue : %s", resp.Status)
     }
 
-    var commit GitHubCommit
+    var commit GithubCommit
     err = json.NewDecoder(resp.Body).Decode(&commit)
     if err != nil {
         logger.Log("ERROR", "Erreur lors du décodage de la réponse JSON pour %s : %v", repoURL, err)
@@ -249,7 +405,6 @@ func getLatestCommit(repoURL, branch string) (string, error) {
     logger.Log("INFO", "Dernier commit pour %s : %s", repoURL, commit.SHA)
     return commit.SHA, nil
 }
-
 // Convertir l'URL du dépôt en URL de l'API GitHub
 func convertRepoURLToAPI(repoURL, branch string) string {
     repoAPIURL := strings.Replace(repoURL, "https://github.com/", "https://api.github.com/repos/", 1)
@@ -323,3 +478,53 @@ func runInitScript(scriptName, repoPath string) error {
     return nil
 }
 
+// Fonction pour obtenir le dernier tag correspondant à une regex depuis GitHub
+func getLatestTag(repoPath, regexPattern string) (string, error) {
+    // Effectuer un fetch des tags sans modifier le dépôt local
+    cmd := exec.Command("git", "-C", repoPath, "fetch", "--tags", "--quiet")
+    if err := cmd.Run(); err != nil {
+        return "", fmt.Errorf("erreur lors du fetch des tags : %v", err)
+    }
+
+    // Lister et filtrer les tags en fonction de la regex
+    cmd = exec.Command("git", "-C", repoPath, "tag", "--sort=-creatordate")
+    output, err := cmd.Output()
+    if err != nil {
+        return "", fmt.Errorf("erreur lors de la récupération des tags : %v", err)
+    }
+
+    tags := strings.Split(string(output), "\n")
+
+    // Compiler la regex
+    re, err := regexp.Compile(regexPattern)
+    if err != nil {
+        return "", fmt.Errorf("erreur lors de la compilation de la regex : %v", err)
+    }
+
+    // Chercher le dernier tag correspondant à la regex
+    for _, tag := range tags {
+        tag = strings.TrimSpace(tag)
+        if re.MatchString(tag) {
+            return tag, nil
+        }
+    }
+
+    return "", fmt.Errorf("aucun tag trouvé correspondant à la regex : %s", regexPattern)
+}
+// Compiler la regex pour vérifier les tags
+func compileRegex(pattern string) (*regexp.Regexp, error) {
+    re, err := regexp.Compile(pattern)
+    if err != nil {
+        return nil, fmt.Errorf("erreur lors de la compilation de la regex : %v", err)
+    }
+    return re, nil
+}
+// Convertir l'URL du dépôt en URL de l'API GitHub pour récupérer les tags
+func convertRepoURLToAPITags(repoURL string) string {
+    // Remplacer la partie de l'URL GitHub par celle de l'API
+    repoAPIURL := strings.Replace(repoURL, "https://github.com/", "https://api.github.com/repos/", 1)
+    // Supprimer l'éventuel suffixe .git dans l'URL
+    repoAPIURL = strings.TrimSuffix(repoAPIURL, ".git")
+    // Ajouter le chemin pour accéder aux tags
+    return fmt.Sprintf("%s/tags", repoAPIURL)
+}

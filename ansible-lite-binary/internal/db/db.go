@@ -38,6 +38,14 @@ func InitDB(dbPath string) error {
         commit_id TEXT,
         FOREIGN KEY (repo_id) REFERENCES repos(id)
     );
+
+    CREATE TABLE IF NOT EXISTS flux (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        flux_name TEXT,  -- Nom du flux (ex: satelease)
+        url TEXT,   -- URL du dépôt surveillé
+        last_tag TEXT,  -- Dernier tag récupéré
+        regex TEXT
+    );
     `
     _, err = db.Exec(sqlStmt)
     if err != nil {
@@ -214,4 +222,86 @@ func LogExecution(dbPath string, repoID int, commitID string) error {
 
     logger.Log("INFO", "Exécution enregistrée avec succès pour le dépôt %d", repoID)
     return nil
+}
+// Vérifier si un flux existe déjà dans la base de données
+func FluxExists(dbPath, fluxName, url string) (bool, error) {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        logger.Log("ERROR", "Impossible d'ouvrir la base de données : %v", err)
+        return false, err
+    }
+    defer db.Close()
+
+    var exists bool
+    err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM flux WHERE flux_name = ? AND url = ?)", fluxName, url).Scan(&exists)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la vérification de l'existence du flux %s pour l'URL %s : %v", fluxName, url, err)
+        return false, err
+    }
+
+    return exists, nil
+}
+
+
+func InsertFlux(dbPath, fluxName, url, regex string) error {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        logger.Log("ERROR", "Impossible d'ouvrir la base de données : %v", err)
+        return err
+    }
+    defer db.Close()
+
+    _, err = db.Exec("INSERT INTO flux (flux_name, url, regex) VALUES (?, ?, ?)", fluxName, url, regex)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de l'insertion du flux %s : %v", fluxName, err)
+        return err
+    }
+
+    logger.Log("INFO", "Le flux %s a été ajouté avec succès à la base de données pour l'URL %s", fluxName, url)
+    return nil
+}
+
+// Mettre à jour le dernier tag pour une URL dans un flux
+func UpdateFluxLastTag(dbPath, fluxName, url, lastTag string) error {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        logger.Log("ERROR", "Impossible d'ouvrir la base de données : %v", err)
+        return err
+    }
+    defer db.Close()
+
+    _, err = db.Exec("UPDATE flux SET last_tag = ? WHERE flux_name = ? AND url = ?", lastTag, fluxName, url)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la mise à jour du dernier tag pour le flux %s (%s) : %v", fluxName, url, err)
+        return err
+    }
+
+    logger.Log("INFO", "Le dernier tag %s pour le flux %s (URL: %s) a été mis à jour", lastTag, fluxName, url)
+    return nil
+}
+
+func GetLastTag(dbPath, fluxName, url string) (string, error) {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        logger.Log("ERROR", "Impossible d'ouvrir la base de données : %v", err)
+        return "", err
+    }
+    defer db.Close()
+
+    var lastTag sql.NullString
+    err = db.QueryRow("SELECT last_tag FROM flux WHERE flux_name = ? AND url = ?", fluxName, url).Scan(&lastTag)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            logger.Log("INFO", "Aucun tag trouvé pour le flux %s et l'URL %s, il sera ajouté", fluxName, url)
+            return "", nil // Aucun tag trouvé
+        }
+        logger.Log("ERROR", "Erreur lors de la récupération du dernier tag pour le flux %s et l'URL %s : %v", fluxName, url, err)
+        return "", err
+    }
+
+    if lastTag.Valid {
+        return lastTag.String, nil
+    } else {
+        return "", nil // Si le tag est NULL, on retourne une chaîne vide
+    }
 }
