@@ -6,3 +6,5 @@ repos:
     init: "init.sh"
     branch: "main"
     path: "/tmp/"
+
+flux:
