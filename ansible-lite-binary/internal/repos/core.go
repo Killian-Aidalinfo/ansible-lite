@@ -64,7 +64,7 @@ func ScheduleRepos(reposConfig *ReposConfig, dbPath string, ghToken string) {
 	// Planifier les dépôts
 	for name, repo := range reposConfig.Repos {
 			repo.Name = name
-			planRepoCron(c, &wg, repo, dbPath)
+			planRepoCron(c, &wg, repo, dbPath, ghToken)
 	}
 
 	// Planifier les flux

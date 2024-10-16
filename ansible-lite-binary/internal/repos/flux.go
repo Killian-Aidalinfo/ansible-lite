@@ -24,6 +24,7 @@ type Flux struct {
 	Init     string   `yaml:"init"`
 	Branch   string   `yaml:"branch"`
 	Path     string   `yaml:"path"`
+	Auth		 bool			`yaml:"auth"` 
 }
 
 type GithubTag struct {
@@ -54,7 +55,7 @@ func loadFluxs(dbPath, reposConfigPath, ghToken string) error {
 					}
 
 					if !exists {
-							latestTag, err := getLatestTagFromAPI(url, flux.Regex, ghToken)
+							latestTag, err := getLatestTagFromAPI(url, flux.Regex, ghToken, flux.Auth)
 							if err != nil {
 									logger.Log("ERROR", "Erreur lors de la récupération des tags pour %s : %v", url, err)
 									continue 
@@ -110,7 +111,7 @@ func processFlux(dbPath, fluxName string, flux Flux, ghToken string) error {
 			}
 
 			// Récupérer le dernier tag correspondant à la regex en utilisant l'API GitHub et le token
-			newTag, err := getLatestTagFromAPI(url, flux.Regex, ghToken)
+			newTag, err := getLatestTagFromAPI(url, flux.Regex, ghToken, flux.Auth)
 			if err != nil {
 					logger.Log("ERROR", "Erreur lors de la récupération du tag GitHub pour l'URL %s : %v", url, err)
 					continue 
@@ -120,14 +121,14 @@ func processFlux(dbPath, fluxName string, flux Flux, ghToken string) error {
 			if newTag != "" && newTag != lastTag {
 					logger.Log("INFO", "Nouveau tag détecté pour %s (flux: %s) : %s", url, fluxName, newTag)
 
-					// Cloner le dépôt d'initialisation (si nécessaire)
-					err := cloneRepo(flux.InitRepo, flux.Branch, flux.Path)
+					// Cloner le dépôt d'initialisation
+					err := cloneRepo(flux.InitRepo, flux.Branch, flux.Path, ghToken, flux.Auth)
 					if err != nil {
 							logger.Log("ERROR", "Erreur lors du clonage du dépôt %s : %v", flux.InitRepo, err)
 							continue 
 					}
 
-					// Exécuter le script init (si nécessaire)
+					// Exécuter le script init
 					err = runInitScript(flux.Init, flux.Path)
 					if err != nil {
 							logger.Log("ERROR", "Erreur lors de l'exécution du script init pour le flux %s : %v", fluxName, err)
@@ -148,7 +149,7 @@ func processFlux(dbPath, fluxName string, flux Flux, ghToken string) error {
 }
 
 // Fonction pour obtenir le dernier tag depuis l'API GitHub en utilisant un token
-func getLatestTagFromAPI(repoURL, regexPattern, ghToken string) (string, error) {
+func getLatestTagFromAPI(repoURL, regexPattern, ghToken string, auth bool) (string, error) {
 	apiURL := convertRepoURLToAPITags(repoURL)
 	client := &http.Client{}
 	page := 1
@@ -156,65 +157,59 @@ func getLatestTagFromAPI(repoURL, regexPattern, ghToken string) (string, error) 
 
 	// Boucle pour paginer et récupérer tous les tags
 	for {
-			// Ajouter le paramètre de pagination `page`
 			paginatedURL := fmt.Sprintf("%s?page=%d", apiURL, page)
 			req, err := http.NewRequest("GET", paginatedURL, nil)
 			if err != nil {
-					logger.Log("ERROR", "erreur lors de la création de la requête HTTP : %v", err)
+					logger.Log("ERROR", "Erreur lors de la création de la requête HTTP : %v", err)
 					return "", err 
 			}
-			req.Header.Set("Authorization", "token "+ghToken)
 
-			// Effectuer la requête
+			// Ajouter l'authentification si nécessaire
+			if auth {
+					req.Header.Set("Authorization", "token "+ghToken)
+			}
+
 			resp, err := client.Do(req)
 			if err != nil {
-					logger.Log("ERROR", "erreur lors de la requête HTTP pour %s : %v", repoURL, err)
+					logger.Log("ERROR", "Erreur lors de la requête HTTP pour %s : %v", repoURL, err)
 					return "", err
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-					logger.Log("ERROR","réponse HTTP inattendue pour %s : %s", repoURL, resp.Status)
+					logger.Log("ERROR", "Réponse HTTP inattendue pour %s : %s", repoURL, resp.Status)
 					return "", err
 			}
 
-			// Décoder la réponse en une liste de tags
 			var tags []GithubTag
 			err = json.NewDecoder(resp.Body).Decode(&tags)
 			if err != nil {
-					logger.Log("ERROR", "erreur lors du décodage de la réponse JSON pour %s : %v", repoURL, err)
+					logger.Log("ERROR", "Erreur lors du décodage de la réponse JSON pour %s : %v", repoURL, err)
 					return "", err
 			}
 
-			// Si aucun tag n'est retourné, c'est la fin de la pagination
 			if len(tags) == 0 {
 					break
 			}
 
-			// Ajouter les tags récupérés à la liste des tags
 			allTags = append(allTags, tags...)
 			page++
 	}
 
-	// Afficher tous les tags récupérés
-	// logger.Log("INFO", "Tags récupérés pour %s :", repoURL)
-	// for _, tag := range allTags {
-	// 		logger.Log("INFO", "Tag: %s", tag.Name)
-	// }
-
 	// Vérifier chaque tag avec la regex
 	re, err := regexp.Compile(regexPattern)
 	if err != nil {
-    logger.Log("ERROR", fmt.Sprintf("erreur lors de la compilation de la regex : %v", err))
-    return "", err
-}
+			logger.Log("ERROR", fmt.Sprintf("Erreur lors de la compilation de la regex : %v", err))
+			return "", err
+	}
 
 	for _, tag := range allTags {
 			if re.MatchString(tag.Name) {
 					return tag.Name, nil
 			}
 	}
-	logger.Log("ERROR", "aucun tag trouvé correspondant à la regex : %s", regexPattern)
+
+	logger.Log("ERROR", "Aucun tag trouvé correspondant à la regex : %s", regexPattern)
 	return "", err
 }
 

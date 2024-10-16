@@ -29,6 +29,7 @@ type Repo struct {
     Init     string `yaml:"init"`
     Branch   string `yaml:"branch"`
     Path     string `yaml:"path"`
+    Auth     bool   `yaml:"auth"`
 }
 
 // Nouvelle structure pour la liste des dépôts avec une map pour les noms des dépôts
@@ -37,13 +38,13 @@ type ReposConfig struct {
     Flux  map[string]Flux `yaml:"flux"`
 }
 
-func planRepoCron(c *cron.Cron, wg *sync.WaitGroup, repo Repo, dbPath string) {
+func planRepoCron(c *cron.Cron, wg *sync.WaitGroup, repo Repo, dbPath string, ghToken string) {
     _, err := c.AddFunc(repo.Watcher, func() {
         logger.Log("INFO", "Tâche planifiée exécutée pour le dépôt %s (%s)", repo.Name, repo.URL)
         wg.Add(1)
         go func() {
             defer wg.Done()
-            err := processRepo(dbPath, repo)
+            err := processRepo(dbPath, repo, ghToken)
             if err != nil {
                 logger.Log("ERROR", "Erreur lors du traitement du dépôt %s (%s) : %v", repo.Name, repo.URL, err)
             }
@@ -54,7 +55,7 @@ func planRepoCron(c *cron.Cron, wg *sync.WaitGroup, repo Repo, dbPath string) {
     }
 }
 
-func processRepo(dbPath string, repo Repo) error {
+func processRepo(dbPath string, repo Repo, ghToken string) error {
     logger.Log("INFO", "Démarrage du traitement pour le dépôt %s (%s)", repo.Name, repo.URL)
     
     repoPath := filepath.Join(repo.Path, repoNameFromURL(repo.URL))
@@ -75,7 +76,7 @@ func processRepo(dbPath string, repo Repo) error {
     }
 
     // Récupérer le dernier commit depuis GitHub
-    latestCommit, err := getLatestCommit(repo.URL, repo.Branch)
+    latestCommit, err := getLatestCommit(repo.URL, repo.Branch, ghToken, repo.Auth)
     if err != nil {
         logger.Log("ERROR", "Erreur lors de la récupération du dernier commit depuis GitHub pour le dépôt %s : %v", repo.URL, err)
         return nil // Continuer même en cas d'erreur
@@ -88,7 +89,7 @@ func processRepo(dbPath string, repo Repo) error {
     }
 
     // Clonage du dépôt
-    err = cloneRepo(repo.URL, repo.Branch, repoPath)
+    err = cloneRepo(repo.URL, repo.Branch, repoPath, ghToken, repo.Auth)
     if err != nil {
         logger.Log("ERROR", "Erreur lors du clonage du dépôt %s : %v", repo.URL, err)
         return nil // Continuer même en cas d'erreur
@@ -120,13 +121,25 @@ func repoNameFromURL(url string) string {
 }
 
 // Fonction pour obtenir le dernier commit depuis GitHub
-func getLatestCommit(repoURL, branch string) (string, error) {
+func getLatestCommit(repoURL, branch, ghToken string, auth bool) (string, error) {
     apiURL := convertRepoURLToAPI(repoURL, branch)
 
     // Ajoute un log pour voir que l'on tente d'obtenir le dernier commit
     logger.Log("INFO", "Tentative de récupération du dernier commit pour %s sur la branche %s via %s", repoURL, branch, apiURL)
 
-    resp, err := http.Get(apiURL)
+    client := &http.Client{}
+    req, err := http.NewRequest("GET", apiURL, nil)
+    if err != nil {
+        logger.Log("ERROR", "Erreur lors de la création de la requête HTTP : %v", err)
+        return "", err
+    }
+
+    if auth {
+        // Ajouter l'authentification par token si auth est vrai
+        req.Header.Set("Authorization", "token "+ghToken)
+    }
+
+    resp, err := client.Do(req)
     if err != nil {
         logger.Log("ERROR", "Erreur lors de la requête HTTP pour %s : %v", repoURL, err)
         return "", err
@@ -148,6 +161,7 @@ func getLatestCommit(repoURL, branch string) (string, error) {
     logger.Log("INFO", "Dernier commit pour %s : %s", repoURL, commit.SHA)
     return commit.SHA, nil
 }
+
 // Convertir l'URL du dépôt en URL de l'API GitHub
 func convertRepoURLToAPI(repoURL, branch string) string {
     repoAPIURL := strings.Replace(repoURL, "https://github.com/", "https://api.github.com/repos/", 1)
@@ -156,7 +170,7 @@ func convertRepoURLToAPI(repoURL, branch string) string {
 }
 
 // Cloner un dépôt depuis GitHub en ne récupérant que le dernier commit
-func cloneRepo(url, branch, path string) error {
+func cloneRepo(url, branch, path, ghToken string, auth bool) error {
     // Vérifier si le répertoire existe déjà
     if _, err := os.Stat(path); !os.IsNotExist(err) {
         // Si le dossier existe déjà, le supprimer
@@ -170,8 +184,16 @@ func cloneRepo(url, branch, path string) error {
 
     logger.Log("INFO", "Clonage du dépôt %s (branche : %s) dans le répertoire %s", url, branch, path)
 
-    // Ajout de l'option --depth=1 pour ne récupérer que le dernier commit
-    cmd := exec.Command("git", "clone", "--branch", branch, "--depth", "1", url, path)
+    var cmd *exec.Cmd
+    if auth {
+        // Utiliser le token pour l'authentification
+        urlWithAuth := strings.Replace(url, "https://", "https://"+ghToken+"@", 1)
+        cmd = exec.Command("git", "clone", "--branch", branch, "--depth", "1", urlWithAuth, path)
+    } else {
+        // Clonage normal sans token
+        cmd = exec.Command("git", "clone", "--branch", branch, "--depth", "1", url, path)
+    }
+    
     cmd.Stdout = os.Stdout
     cmd.Stderr = os.Stderr
 
