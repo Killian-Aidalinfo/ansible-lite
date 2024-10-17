@@ -1,15 +1,12 @@
-# Release v0.0.4 - Ansible Lite
+# Release v0.0.5 - Ansible Lite
 
 ## 🇬🇧 English Version
 
 ### 🚀 New Features
-- **Private repository support**: You can now add `auth: true` in the `repos.yaml` configuration file to support private repositories.
-- **Token-based authentication**: Added the ability to use a token for cloning private repositories via GitHub. In the `config.yaml` configuration file, the `gh_token` parameter allows specifying the token to use.
-- **GitHub Flux management**: The `flux` mode has been introduced, allowing you to monitor GitHub tags and automatically clone an init repository for each new tag.
-- **Internal API creation**: An internal API has been added, which will later allow managing the tool via CLI.
+- **Docker image monitoring**: Added the ability to monitor Docker images in the `repos.yaml` under the `continuous` section. It allows checking for changes in Docker image SHA and running scripts if a new image is detected.
+- **Cron Support for continuous part**: You can now define custom `watcher` cron schedules for continuous tasks in the `repos.yaml` file, allowing fine-tuned control over image monitoring intervals.
+- **Log rotation**: Implemented log file rotation with an automatic management system for archived files. Logs will be automatically compressed and archived.
 
-### 🐛 Bug Fixes
-- The timestamp in the logs no longer appears twice.
 
 ### 📦 Installation
 Run an apt upgrade to update your installation:
@@ -23,18 +20,14 @@ Download and install the `.deb` package:
 ## 🇫🇷 Version Française
 
 ### 🚀 Nouvelles fonctionnalités
-- **Support de repository privée** : Il est possible d'ajouter `auth: true` dans le fichier de configuration `repos.yaml` pour prendre en charge les dépôts privés.
-- **Authentification via token** : Ajout de la possibilité d'utiliser un token pour cloner des dépôts privés via GitHub. Dans le fichier de configuration `config.yaml`, le paramètre `gh_token` permet de spécifier le token à utiliser.
-- **Gestion des flux GitHub** : Le mode `flux` fait son apparition, il permet de surveiller des tags GitHub et de cloner automatiquement un dépôt d'init à chaque nouveau tag.
-- **Création d'une API interne** : Une API interne a été ajoutée pour plus tard permettre la gestion de l'outil en CLI.
-
-### 🐛 Corrections de bugs
-- L'horodatage dans les logs n'apparaît plus en double.
+- **Surveillance des images Docker** : Ajout de la possibilité de surveiller des images Docker dans la section `continuous` du fichier `repos.yaml`. Cela permet de vérifier les changements de SHA des images Docker et de lancer des scripts en cas de nouvelle image détectée.
+- **Support cron pour la partie `continuous`** : Il est désormais possible de définir des plages de temps personnalisées avec `watcher` pour les tâches continues dans le fichier `repos.yaml`, offrant un contrôle plus précis sur la fréquence de surveillance des images.
+- **Rotation des logs** : Implémentation de la rotation des fichiers de logs avec un système de gestion automatique des fichiers archivés. Les logs seront automatiquement compressés et archivés.
 
 ### 📦 Installation
 Faites un apt upgrade pour mettre à jour votre installation :
-
 `sudo apt upgrade ansible-lite`
 
 Téléchargez et installez le package `.deb` :
 - `ansible-lite_amd64.deb`
+"""

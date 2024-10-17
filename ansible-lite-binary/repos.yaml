@@ -5,6 +5,7 @@ repos:
     init: "init.sh"
     branch: "main"
     path: "temp/"
+    auth: false
 
 flux:
   satelease:
@@ -12,7 +13,19 @@ flux:
       - "https://github.com/aidalinfo/MS-accord-validation"
     watcher: "*/2 * * * *"
     regex: "^rc-.*$"
-    init_repo: "https://github.com/Killian-Aidalinfo/test-ansible-init-ms"
+    init_repo: "https://github.com/aidalinfo/INFRA-BETA"
+    init: "satelease/init.sh"
+    branch: "main"
+    path: "temp/"
+    auth: true
+
+continuous:
+  satelease:
+    images: 
+      - "rg.fr-par.scw.cloud/aidalinfo-prod/ms-backend-gateway:rc-latest"
+    watcher: "*/2 * * * *"
+    init_repo: "https://github.com/Killian-Aidalinfo/demo-ansible-lite"
     init: "init.sh"
     branch: "main"
     path: "temp/"
+    auth: false

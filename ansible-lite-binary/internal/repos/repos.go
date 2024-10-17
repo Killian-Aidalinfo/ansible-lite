@@ -32,11 +32,11 @@ type Repo struct {
     Auth     bool   `yaml:"auth"`
 }
 
-// Nouvelle structure pour la liste des dépôts avec une map pour les noms des dépôts
-type ReposConfig struct {
-    Repos map[string]Repo `yaml:"repos"`
-    Flux  map[string]Flux `yaml:"flux"`
-}
+// // Nouvelle structure pour la liste des dépôts avec une map pour les noms des dépôts
+// type ReposConfig struct {
+//     Repos map[string]Repo `yaml:"repos"`
+//     Flux  map[string]Flux `yaml:"flux"`
+// }
 
 func planRepoCron(c *cron.Cron, wg *sync.WaitGroup, repo Repo, dbPath string, ghToken string) {
     _, err := c.AddFunc(repo.Watcher, func() {

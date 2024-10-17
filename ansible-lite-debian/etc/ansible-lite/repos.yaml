@@ -9,3 +9,15 @@ repos:
     auth: false
     
 flux:
+
+
+continuous:
+  satelease:
+    images: 
+      - "private.registry/namespace/image:rc-latest"
+    watcher: "*/2 * * * *"
+    init_repo: "https://github.com/Killian-Aidalinfo/demo-ansible-lite"
+    init: "init.sh"
+    branch: "main"
+    path: "temp/"
+    auth: false

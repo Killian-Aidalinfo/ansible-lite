@@ -1,5 +1,5 @@
 GLOBAL:
-  type: client # Client / Server or both
+  type: client
   db_path: /etc/ansible-lite/db.sqlite3
   log_path: /etc/ansible-lite/log.log
   log_level: info

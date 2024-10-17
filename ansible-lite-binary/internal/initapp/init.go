@@ -12,6 +12,7 @@ import (
 	"aidalinfo/ansible-lite/internal/logger"
 	"aidalinfo/ansible-lite/internal/api"
 	"aidalinfo/ansible-lite/internal/token" 
+	"github.com/natefinch/lumberjack"
 )
 
 // InitApp est la fonction d'initialisation principale qui gère les logs et la base de données
@@ -33,15 +34,14 @@ func InitApp(configPath string) (*config.GlobalConfig, error) {
 		}
 	}
 
-	// Ouvrir le fichier de log
-	logFile, err := os.OpenFile(cfg.Global.LogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		logger.Log("ERROR", "Impossible d'ouvrir le fichier de log : %v", err)
-		return nil, fmt.Errorf("Impossible d'ouvrir le fichier de log : %v", err)
-	}
-	// Rediriger le logger vers le fichier de log avec log.SetOutput
-	log.SetOutput(logFile)
-
+	//Gestion des logs avec lumberjack
+	log.SetOutput(&lumberjack.Logger{
+		Filename:   cfg.Global.LogPath,  // Nom du fichier de log
+		MaxSize:    50,              // Taille max en mégaoctets avant rotation
+		MaxBackups: 5,               // Nombre maximal de fichiers de backup conservés
+		MaxAge:     90,              // Durée maximale de conservation des fichiers en jours
+		Compress:   true,            // Compresser les fichiers de log archivés
+})
 	// Vérifier si le token existe dans la configuration
 	if cfg.Global.Credentials == "" {  // Utiliser Credentials avec une majuscule
 		logger.Log("INFO", "Aucun token trouvé, génération d'un nouveau token")
