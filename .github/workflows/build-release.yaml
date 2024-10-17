@@ -113,7 +113,6 @@ jobs:
         files: |
           ansible-lite-binary/ansible-lite
           ansible-lite_amd64.deb
-        body_path: RELEASE.md
 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
